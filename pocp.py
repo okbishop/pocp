@@ -49,6 +49,7 @@ parser.add_argument('--pocp_pass', action="store",dest='pocp_pass')
 parser.add_argument('--dw_user', action="store",dest='dw_user',default='linux_user')
 parser.add_argument('--dw_pass', action="store",dest='dw_pass')
 cmd_line = parser.parse_args()
+pocp_path = '/home/humed/python/POCP/'
 
 #Get Max_node capacity offered from datawarehouse
 con = pyodbc.connect('DSN=NZxDaily_LIVE;UID=' + cmd_line.dw_user + ';PWD=' + cmd_line.dw_pass)
@@ -63,7 +64,7 @@ ID_map = max_offered.ix[:,['ID','Company_code']].set_index('ID').drop_duplicates
 ID_map['Colour'] = ID_map.Company_code.map(lambda x: part[x])
 
 #Get some useful mappings from Nicky's ConnectionNames.xls file, found at P:\HH\Source\Locations
-names = ExcelFile('/home/humed/.gvfs/common on ecomfp01/HH/Source/Locations/ConnectionNames.xls') 
+names = ExcelFile('/home/dave/.gvfs/common on ecomfp01/HH/Source/Locations/ConnectionNames.xls') 
 cron_maps = names.parse('Names')
 maps = names.parse('Connection Points')
 nsp = names.parse('NSP Mapping Table',skiprows=1)
@@ -180,15 +181,15 @@ bufferIO.seek(0)
 pocp = read_csv(bufferIO,parse_dates=['Start','End','Last Modified'],date_parser=POCP_date_parser,sep='\t')
 
 #add current POCP download to all time POCP data then drop duplicates
-store = HDFStore('/home/humed/python/POCP/pocp_all.h5','r')
+store = HDFStore(pocp_path + 'pocp_all.h5','r')
 P_all = store['POCP']   # read all previous pocp data
 store.close()
 P = concat([P_all,pocp])   #add latest download 
 P = P.drop_duplicates()    #and drop any duplicates
-store = HDFStore('/home/humed/python/POCP/pocp_all.h5','w')
+store = HDFStore(pocp_path + 'pocp_all.h5','w')
 store['POCP'] = P  # read all previous pocp data
 store.close()
-P.to_csv('/home/humed/python/POCP/pocp_all.csv') #save the updated POCP database as a csv (good for looking a diffs using gitk)
+P.to_csv(pocp_path + 'pocp_all.csv') #save the updated POCP database as a csv (good for looking a diffs using gitk)
 
 
 #Report current confirmed (+tentative) outages
@@ -281,7 +282,7 @@ def plot_fig(x,start_time,end_time,short_long,ymax1,ymax2):
     plt.xticks(rotation=0)
     plt.xlim([start_time,end_time])
     plt.ylim([0,ymax2])
-    plt.savefig('/home/humed/python/POCP/plots/' + short_long + '/pocp_at_' + datetime.now().date().isoformat() + '-' + str(datetime.now().hour) + '.png',axis='tight')
+    plt.savefig(pocp_path + 'plots/' + short_long + '/pocp_at_' + datetime.now().date().isoformat() + '-' + str(datetime.now().hour) + '.png',axis='tight')
 strt = (datetime.now() - timedelta(183))
 endt = (datetime.now() + timedelta(183))
 x =POCP_to_timeseries(P_G,strt,endt)
