@@ -48,8 +48,10 @@ parser.add_argument('--pocp_user', action="store",dest='pocp_user',default='davi
 parser.add_argument('--pocp_pass', action="store",dest='pocp_pass')
 parser.add_argument('--dw_user', action="store",dest='dw_user',default='linux_user')
 parser.add_argument('--dw_pass', action="store",dest='dw_pass')
+parser.add_argument('--pocp_path', action="store",dest='pocp_path',default='/home/dave/python/pocp/')
+
 cmd_line = parser.parse_args()
-pocp_path = '/home/humed/python/POCP/'
+pocp_path = cmd_line.pocp_path
 
 #Get Max_node capacity offered from datawarehouse
 con = pyodbc.connect('DSN=NZxDaily_LIVE;UID=' + cmd_line.dw_user + ';PWD=' + cmd_line.dw_pass)
@@ -64,7 +66,7 @@ ID_map = max_offered.ix[:,['ID','Company_code']].set_index('ID').drop_duplicates
 ID_map['Colour'] = ID_map.Company_code.map(lambda x: part[x])
 
 #Get some useful mappings from Nicky's ConnectionNames.xls file, found at P:\HH\Source\Locations
-names = ExcelFile('/home/dave/.gvfs/common on ecomfp01/HH/Source/Locations/ConnectionNames.xls') 
+names = ExcelFile(pocp_path + '../../.gvfs/common on ecomfp01/HH/Source/Locations/ConnectionNames.xls') 
 cron_maps = names.parse('Names')
 maps = names.parse('Connection Points')
 nsp = names.parse('NSP Mapping Table',skiprows=1)
