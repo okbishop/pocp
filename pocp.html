@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+@import url(http://fonts.googleapis.com/css?family=Yanone+Kaffeesatz:400,700);
+.title {
+    font-family: "Yanone Kaffeesatz";
+    text-rendering: optimizeLegibility;
+    font-size: 42px;
+    margin-top: .3em;
+    margin-bottom: 0; 
+}
+.notes {
+    font-family: "Yanone Kaffeesatz";
+    text-rendering: optimizeLegibility;
+    font-size: 14px;
+    margin-top: .3em;
+    margin-bottom: 0; 
+	
+}
+svg {
+  font: 10px sans-serif;
+}
+
+path {
+  fill: lightgrey;
+  stroke: black;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: black;
+  shape-rendering: crispEdges;
+}
+
+.brush .extent {
+  stroke: #fff;
+  fill-opacity: .125;
+  shape-rendering: crispEdges;
+}
+
+#pocp-list {
+  min-height: 1024px;
+}
+
+#pocp-list .date,
+#pocp-list .day {
+  margin-bottom: .4em;
+}
+
+#pocp-list .day {
+	font-family: "Yanone Kaffeesatz";
+    text-rendering: optimizeLegibility;
+}
+
+#pocp-list .outage {
+  line-height: 1.5em;
+  background: #eee;
+  width: 840px;
+  margin-bottom: 1px;
+}
+
+
+#pocp-list .outage div {
+  display: inline-block;
+  width: 100px;
+}
+
+#pocp-list div.loss,
+#pocp-list div.id {
+  width: 50px;
+  padding-right: 10px;
+  padding-left: 10px;
+  text-align: left;
+}
+
+#pocp-list div.End {
+  color: #999;
+  width: 150px;
+  padding-right: 10px;
+  padding-left: 10px;
+  text-align: left;
+}
+
+
+#pocp-list .early {
+  color: green;
+}
+
+aside {
+  position: absolute;
+  left: 840px;
+  font-size: smaller;
+  width: 220px;
+  font-family: "Yanone Kaffeesatz";
+  text-rendering: optimizeLegibility;
+}
+
+
+
+</style>
+<body>
+
+	
+<div id="charts">
+  <div id="line-chart" class="chart">
+    <div class="title">POCP generation outage data</div>
+    <div class="notes"> <p>Notes: </p>
+    <ol> 
+    <li>best viewed with Chrome or Firefox;</li>
+    <li>selected outage list currently by Start datetime only;</li>
+    <li>maximum of 100 outages listed at anyone time;</li>
+    <li>POCP data is horribly inconsistant (various time-dependent logic has been applied to get the data in this form - there may be issues);</li>
+    <li>Coming soon to a browser near you, selectors for company/island and generation type...</li>
+    <li>Automatic updates *should* occur daily at 1am/7am/1pm and 7pm.</li>
+    </ol></div>
+    <!--Add buttons for each participant in the POCP database-->
+    <table border="0">
+        <tr>
+            <td><div id="Total">
+			   <input name="updateButton"
+                      type="button"
+                      value="Total"
+                      onclick="window.location.href='pocp.html'"/></td>
+            <td><div id="Genesis">
+			   <input name="updateButton"
+                      type="button"
+                      value="Genesis"
+                      onclick="genesisData()"/></td>
+            <td><div id="Meridian">
+			   <input name="updateButton"
+                      type="button"
+                      value="Meridian"
+                      onclick="meridianData()"/></td>
+            <td><div id="MRP">
+			   <input name="updateButton"
+                      type="button"
+                      value="MRP"
+                      onclick="MRPData()"/></td>
+            <td><div id="Contact">
+			   <input name="updateButton"
+                      type="button"
+                      value="Contact"
+                      onclick="contactData()"/></td>
+
+        </tr>
+    </table>
+  </div>
+</div>
+<aside id="totals"><span id="active">-</span> of <span id="total_outages">-</span> outages selected.</aside>
+
+<div id="lists">
+  <div id="pocp-list" class="list"></div>
+</div>
+
+<!--Now for the fun stuff, d3/Javascript code -->
+<script src="http://d3js.org/d3.v3.min.js"></script>
+<script src="crossfilter.v1.min.js"></script>
+<script>
+
+var margin = {top: 10, right: 10, bottom: 100, left: 40},
+    margin2 = {top: 430, right: 10, bottom: 20, left: 40},
+    width = 960 - margin.left - margin.right,
+    height = 500 - margin.top - margin.bottom,
+    height2 = 500 - margin2.top - margin2.bottom;
+
+var parseDate = d3.time.format("%b %Y").parse;
+
+var x = d3.time.scale().range([0, width]),
+    x2 = d3.time.scale().range([0, width]),
+    y = d3.scale.linear().range([height, 0]),
+    y2 = d3.scale.linear().range([height2, 0]);
+
+var xAxis = d3.svg.axis().scale(x).orient("bottom"),
+    xAxis2 = d3.svg.axis().scale(x2).orient("bottom"),
+    yAxis = d3.svg.axis().scale(y).orient("left");
+
+var brush = d3.svg.brush()
+    .x(x2)
+    .on("brush", brush);
+var area = d3.svg.area()
+    .interpolate("step-before")
+    .x(function(d) { return x(d.date); })
+    .y0(height)
+    .y1(function(d) { return y(d.price); });
+
+var area2 = d3.svg.area()
+    .interpolate("step-before")
+    .x(function(d) { return x2(d.date); })
+    .y0(height2)
+    .y1(function(d) { return y2(d.price); });
+
+var svg = d3.select("#line-chart").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom);
+
+svg.append("defs").append("clipPath")
+    .attr("id", "clip")
+  .append("rect")
+    .attr("width", width)
+    .attr("height", height);
+
+var focus = svg.append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+var context = svg.append("g")
+    .attr("transform", "translate(" + margin2.left + "," + margin2.top + ")");
+
+//Load in the pocp time series data, and the outage listing data
+var data, pocp, remaining = 2;
+  d3.csv("pocp_data_part_ts_year.csv", function(error,csv) {
+    data = csv;
+    if (!--remaining) doSomething(); //when remaining = 0 this becomes true, and we then run doSomething,
+  });
+  d3.csv("pocp_data_year.csv", function(error, csv) {
+    pocp = csv;
+    if (!--remaining) doSomething(); //when remaining = 0 this becomes true, and we then run doSomething,
+  });
+
+
+function doSomething() {
+	 // A nest operator, for grouping the pocp list.
+     var nestByDate = d3.nest()
+      .key(function(d) { return d3.time.day(d.Start); });
+
+    // Various formatters. 
+    var parseDate = d3.time.format("%Y-%m-%d %H:%M:%S").parse;
+    var formatNumber = d3.format(",d");
+    var formatChange = d3.format("+,d");
+    var formatDateday = d3.time.format("%Y-%m-%d");
+    var formatDatetime = d3.time.format("%H:%M:%S");  
+    var formatDate = d3.time.format("%Y-%m-%d %H:%M:%S");
+    
+	// A little coercion, since both CSVs are untyped.
+    data.forEach(function(d) {
+    d.date = parseDate(d.datetime);
+    d['North_Contact_Energy'] = +d['North_Contact_Energy'];
+    //d.price = +d['North_Contact_Energy'];
+    d['North_Genesis'] = +d['North_Genesis'];
+    d['North_Meridian'] = +d['North_Meridian'];
+    d['North_Mighty_River'] = +d['North_Mighty_River'];
+    d['North_Trustpower'] = +d['North_Trustpower'];
+    d['South_Contact_Energy'] = +d['South_Contact_Energy'];
+    d['South_Genesis'] = +d['South_Genesis'];
+    d['South_Meridian'] = +d['South_Meridian'];
+    //d.price = +d['South_Meridian'];
+
+    d['South_Trustpower'] = +d['South_Trustpower'];
+    d['North_Total'] = +d['North_Total'];
+    d['South_Total'] = +d['South_Total'];
+    d.price = +d['NZ_Total'];
+    });
+
+    pocp.forEach(function(d, i) {
+    d.index = i;
+    d.Start = parseDate(d.Start);
+    d.End = parseDate(d.End);
+    d['MW Loss'] = +d['MW Loss'];
+    d.id = d.id;
+    d.NP_MWh = +d.NP_MWh;
+    d['MW remaining'] = +d['MW remaining'];
+    d['MV remaining'] = +d['MV remaining'];
+    d['Last Modified'] = parseDate(d['Last Modified']);
+    d['Outage Block'] = d['Outage Block'];
+    d.Owner = d.Owner;
+    d.type = d.type;
+    });
+
+  //Setup scales 
+  x.domain(d3.extent(data.map(function(d) { return d.date; })));
+  y.domain([0, d3.max(data.map(function(d) { return d.price; }))]);
+  x2.domain(x.domain());
+  y2.domain(y.domain());
+
+  focus.append("path")
+      .datum(data)
+      .attr("clip-path", "url(#clip)")
+      .attr("d", area);
+
+  focus.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + height + ")")
+      .call(xAxis);
+
+  focus.append("g")
+      .attr("class", "y axis")
+      .call(yAxis);
+
+  context.append("path")
+      .datum(data)
+      .attr("d", area2);
+
+  context.append("g")
+      .attr("class", "x axis")
+      .attr("transform", "translate(0," + height2 + ")")
+      .call(xAxis2);
+
+  context.append("g")
+      .attr("class", "x brush")
+      .call(brush)
+    .selectAll("rect")
+      .attr("y", -6)
+      .attr("height", height2 + 7);
+  
+  
+
+      
+};
+//In this function we can return the brush elements, in this case brush.extent()[0] is the zoomed start.
+//We now want to use this with the POCP csv data to list the outages for this duration
+//What is the best method to achieve this?
+function brush() {
+  x.domain(brush.empty() ? x2.domain() : brush.extent());
+  focus.select("path").attr("d", area);
+  focus.select(".x.axis").call(xAxis);
+  var start = brush.extent()[0]
+  var end = brush.extent()[1]
+  //filter pocp list data
+  // Create the crossfilter for the relevant dimensions and groups.
+    var outage = crossfilter(pocp);
+    var n = outage.groupAll().reduceCount().value();
+    var all = outage.groupAll();
+    var Loss = outage.dimension(function(d) { return d['MW Loss'];});
+    var Owner = outage.dimension(function(d) {return d.Owner;});
+    var Owners = Owner.group().reduceSum(function(d){return d.NP_MWh;});
+    //var top_owner_loss=Owners.top(1)
+    //Attempt to filter current outages with crossfilter filter
+    //var outage_by_start = outage.dimension(function(d){return d.Start});
+    //var outage_by_end = outage.dimension(function(d){return d.End});
+    //outage_by_start.filter([-Infinity, now])
+    //outage_by_end.filter([now,Infinity])
+    //console.log("There is a total of " + n + " generation outages")
+    //Filter out the current outages from the data set
+    var sf=outage.dimension(function(d){return d.Start})
+    var ef=outage.dimension(function(d){return d.End})
+    //filter dimension to get outages occuring now
+    sf.filter([-Infinity, end]);
+    ef.filter([start,Infinity]);
+    var current_outages = outage.dimension(function(d){return d['MW Loss'];}).top(Infinity); //sorted by ['MW Loss']
+    //console.log(current_outages)
+    //console.log(sf)
+    //console.log("Of which " + outage.groupAll().reduceCount().value() + " are within selected date span")
+    //console.log("The current largest outage is " + Loss.top(4)[0]['Outage Block'] + " = " + Loss.top(4)[0]['MW Loss'] + "MW")
+
+   //********************************************************************//
+   
+    var nestByDate = d3.nest()
+      .key(function(d) { return d3.time.day(d.Start); });
+
+    // Various formatters. 
+    var parseDate = d3.time.format("%Y-%m-%d %H:%M:%S").parse;
+    var formatNumber = d3.format(",d");
+    var formatChange = d3.format("+,d");
+    var formatDateday = d3.time.format("%Y-%m-%d");
+    var formatDatetime = d3.time.format("%H:%M:%S");  
+    var formatDate = d3.time.format("%Y-%m-%d %H:%M:%S");
+
+  //Try and add a list of outages     
+  // Render the initial lists.
+  var list = d3.selectAll(".list")
+      .data([pocpList]);
+  
+  // Render the total.
+  d3.selectAll("#total_outages")
+      .text(formatNumber(outage.size()));
+
+  var outage = crossfilter(current_outages),
+  all = outage.groupAll(),
+  Startdate = outage.dimension(function(d) { return d3.time.day(d.Start); });
+
+  
+  renderAll();
+
+  // Renders the specified chart or list.
+  function render(method) {
+    d3.select(this).call(method);
+  }
+
+  // Whenever the brush moves, re-rendering everything.
+  function renderAll() {
+    //chart.each(render);
+    list.each(render);
+    d3.select("#active").text(formatNumber(all.value()));
+  }
+  function pocpList(div) {
+    var outagesByDate = nestByDate.entries(Startdate.top(100));
+
+    div.each(function() {
+      var Startdate = d3.select(this).selectAll(".date")
+          .data(outagesByDate, function(d) { return d.key; });
+
+      Startdate.enter().append("div")
+          .attr("class", "date")
+        .append("div")
+          .attr("class", "day")
+          .text(function(d) { return formatDateday(d.values[0].Start); });
+
+      Startdate.exit().remove();
+
+      var outage = Startdate.order().selectAll(".outage")
+          .data(function(d) {
+            // Sort values for each group, since they aren't guaranteed to be in order within each group.
+            return d.values.sort(function(a, b) { return b.Start - a.Start; });
+          }, function(d) { return d.index; });
+
+      var outageEnter = outage.enter().append("div")
+          .attr("class", "outage");
+
+      outageEnter.append("div")
+          .attr("class", "Start")
+          .text(function(d) { return formatDatetime(d.Start); });
+
+      outageEnter.append("div")
+          .attr("class", "End")
+          .text(function(d) { return formatDate(d.End); });
+
+      outageEnter.append("div")
+          .attr("class", "Outage")
+          .text(function(d) { return d['Outage Block']; });
+
+      outageEnter.append("div")
+          .attr("class", "Owner")
+          .text(function(d) { return d.Owner; });
+
+      outageEnter.append("div")
+          .attr("class", "MW loss")
+          .text(function(d) { return d['MW Loss']; });
+
+
+      outageEnter.append("div")
+          .attr("class", "ID")
+          .text(function(d) { return d.id; });
+
+
+      outage.exit().remove();
+
+      outage.order();
+    });
+  }
+
+  //********************************************************************//
+ 
+
+}
+
+
+</script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
