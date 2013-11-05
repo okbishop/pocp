@@ -1,3 +1,3 @@
-Current draft tools for downloading and viewing POCP data
+Current draft tools for downloading, monitoring and viewing POCP outage data
 
 D J Hume, 5th November 2013
